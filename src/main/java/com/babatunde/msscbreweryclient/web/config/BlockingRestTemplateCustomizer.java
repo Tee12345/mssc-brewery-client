@@ -1,13 +1,12 @@
 package com.babatunde.msscbreweryclient.web.config;
 
-import org.apache.http.client.config.RequestConfig;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.DefaultConnectionKeepAliveStrategy;
-import org.apache.http.impl.client.HttpClients;
-import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
-import org.springframework.beans.factory.annotation.Value;
+import org.apache.hc.client5.http.config.RequestConfig;
+import org.apache.hc.client5.http.impl.DefaultConnectionKeepAliveStrategy;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
+import org.apache.hc.core5.util.Timeout;
 import org.springframework.boot.web.client.RestTemplateCustomizer;
-import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
@@ -15,44 +14,32 @@ import org.springframework.web.client.RestTemplate;
 @Component
 public class BlockingRestTemplateCustomizer implements RestTemplateCustomizer {
 
-    private final Integer maxtotalconnections;
-    private final Integer defaultmaxtotalconnections;
-    private final Integer connectionrequesttiemout;
-    private final Integer sockettimeout;
-
-    public BlockingRestTemplateCustomizer(@Value("${sfg.maxtotalconnections}") Integer maxtotalconnections,
-                                          @Value("${sfg.defaultmaxtotalconnections}") Integer defaultmaxtotalconnections,
-                                          @Value("${sfg.connectionrequesttiemout}") Integer connectionrequesttiemout,
-                                          @Value("${sfg.sockettimeout}") Integer sockettimeout) {
-        this.maxtotalconnections = maxtotalconnections;
-        this.defaultmaxtotalconnections = defaultmaxtotalconnections;
-        this.connectionrequesttiemout = connectionrequesttiemout;
-        this.sockettimeout = sockettimeout;
-    }
-
-    public ClientHttpRequestFactory clientHttpRequestFactory(){
+    public HttpComponentsClientHttpRequestFactory clientHttpRequestFactory() {
+        // Create a connection manager with custom configuration.
         PoolingHttpClientConnectionManager connectionManager = new PoolingHttpClientConnectionManager();
-        connectionManager.setMaxTotal(maxtotalconnections);
-        connectionManager.setDefaultMaxPerRoute(defaultmaxtotalconnections);
+        connectionManager.setMaxTotal(100); // Max total connections
+        connectionManager.setDefaultMaxPerRoute(20); // Max connections per route
 
-        RequestConfig requestConfig = RequestConfig
-                .custom()
-                .setConnectionRequestTimeout(connectionrequesttiemout)
-                .setSocketTimeout(sockettimeout)
+        // Set request configuration
+        RequestConfig requestConfig = RequestConfig.custom()
+                .setConnectTimeout(Timeout.ofMilliseconds(3000))
+                .setConnectionRequestTimeout(Timeout.ofMilliseconds(3000))
+                .setResponseTimeout(Timeout.ofMilliseconds(3000))
                 .build();
 
-        CloseableHttpClient httpClient = HttpClients
-                .custom()
+        // Create HTTP client
+        CloseableHttpClient httpClient = HttpClients.custom()
                 .setConnectionManager(connectionManager)
-                .setKeepAliveStrategy(new DefaultConnectionKeepAliveStrategy())
+                .setKeepAliveStrategy(DefaultConnectionKeepAliveStrategy.INSTANCE)
                 .setDefaultRequestConfig(requestConfig)
                 .build();
 
+        // Create request factory
         return new HttpComponentsClientHttpRequestFactory(httpClient);
     }
 
     @Override
     public void customize(RestTemplate restTemplate) {
-            restTemplate.setRequestFactory(this.clientHttpRequestFactory());
+        restTemplate.setRequestFactory(clientHttpRequestFactory());
     }
 }
